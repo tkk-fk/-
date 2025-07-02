@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>声量チェッカー</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 50px;
+      transition: background-color 0.3s ease;
+    }
+
+    button {
+      font-size: 1.2em;
+      margin: 10px;
+      padding: 10px 20px;
+    }
+
+    #result {
+      font-size: 2em;
+      margin-top: 30px;
+      white-space: pre-line;
+    }
+
+    .slider-group {
+      margin-top: 20px;
+      font-size: 1em;
+    }
+
+    .slider-group label {
+      display: inline-block;
+      width: 120px;
+      text-align: right;
+      margin-right: 10px;
+    }
+
+    .slider-group input[type="number"] {
+      width: 60px;
+    }
+
+    .slider-wrapper {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>声の大きさチェッカー</h1>
+
+  <button onclick="startListening()">声をチェックする</button>
+  <button onclick="stopListening()">停止する</button>
+
+  <div class="slider-group">
+    <div class="slider-wrapper">
+      <label for="mouseThreshold">🐭 ネズミ以下:</label>
+      <input type="number" id="mouseThreshold" value="10" />
+    </div>
+    <div class="slider-wrapper">
+      <label for="dogThreshold">🐶 犬以上:</label>
+      <input type="number" id="dogThreshold" value="70" />
+    </div>
+    <div class="slider-wrapper">
+      <label for="elephantThreshold">🐘 象以上:</label>
+      <input type="number" id="elephantThreshold" value="100" />
+    </div>
+  </div>
+
+  <div id="result">🎤 マイクを使ってください</div>
+
+  <script>
+    let audioContext, analyser, microphone, javascriptNode, stream;
+    let smoothedAverage = 0;
+
+    function startListening() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(s) {
+          stream = s;
+
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          analyser = audioContext.createAnalyser();
+          microphone = audioContext.createMediaStreamSource(stream);
+          javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+
+          analyser.smoothingTimeConstant = 0.3;
+          analyser.fftSize = 1024;
+
+          microphone.connect(analyser);
+          analyser.connect(javascriptNode);
+          javascriptNode.connect(audioContext.destination);
+
+          javascriptNode.onaudioprocess = function() {
+            let array = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(array);
+            let values = 0;
+
+            for (let i = 0; i < array.length; i++) {
+              values += array[i];
+            }
+
+            let average = values / array.length;
+            smoothedAverage = 0.8 * smoothedAverage + 0.2 * average;
+            let volume = smoothedAverage.toFixed(2);
+
+            // しきい値を取得
+            let mouseThreshold = parseFloat(document.getElementById("mouseThreshold").value);
+            let dogThreshold = parseFloat(document.getElementById("dogThreshold").value);
+            let elephantThreshold = parseFloat(document.getElementById("elephantThreshold").value);
+
+            let resultText = "";
+
+            if (smoothedAverage > elephantThreshold) {
+              resultText = "🦖 ティラノサウルス　爆音すぎる！";
+              document.body.style.backgroundColor = "#ff6666";
+            } else if (smoothedAverage > dogThreshold) {
+              resultText = "🐘 象　うるさい";
+              document.body.style.backgroundColor = "#ff9999";
+            } else if (smoothedAverage > mouseThreshold) {
+              resultText = "🐶 犬　ちょうどよい";
+              document.body.style.backgroundColor = "#a0ffa0";
+            } else {
+              resultText = "🐭 ネズミ　しずか";
+              document.body.style.backgroundColor = "#d0d0ff";
+            }
+
+            resultText += `\n音量: ${volume}`;
+            document.getElementById("result").innerText = resultText;
+          };
+        })
+        .catch(function(err) {
+          alert('マイクのアクセスが拒否されました: ' + err);
+        });
+    }
+
+    function stopListening() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (audioContext) {
+        audioContext.close();
+      }
+      document.body.style.backgroundColor = "#ffffff";
+      document.getElementById("result").innerText = "🎤 マイク停止中";
+    }
+  </script>
+</body>
+</html>
